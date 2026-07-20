@@ -1,0 +1,30 @@
+<!doctype html>
+<!--
+  core-chatbot-platform — Παράδειγμα ενσωμάτωσης για τον πελάτη.
+
+  Ο πελάτης χρειάζεται ΜΟΝΟ τη γραμμή <script> παρακάτω, ακριβώς πριν
+  από το </body> του site του. Τίποτα άλλο.
+
+  - Αντικαθιστάς το CLIENT_ID με το client_id του πελάτη.
+  - Αντικαθιστάς το https://YOUR-PLATFORM.onrender.com με το URL της πλατφόρμας.
+  - Το "async" σημαίνει ότι το widget φορτώνει παράλληλα και ΔΕΝ
+    καθυστερεί καθόλου το site του πελάτη.
+-->
+<html lang="el">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Παράδειγμα σελίδας πελάτη</title>
+</head>
+<body>
+
+  <h1>Το site του πελάτη</h1>
+  <p>Οποιοδήποτε περιεχόμενο. Το chat εμφανίζεται κάτω δεξιά.</p>
+
+  <!-- ↓↓↓ ΤΟ SNIPPET ΤΟΥ ΠΕΛΑΤΗ — μία γραμμή ↓↓↓ -->
+  <script src="https://YOUR-PLATFORM.onrender.com/widget.js"
+          data-client-id="CLIENT_ID" async></script>
+  <!-- ↑↑↑ ΤΕΛΟΣ SNIPPET ↑↑↑ -->
+
+</body>
+</html>

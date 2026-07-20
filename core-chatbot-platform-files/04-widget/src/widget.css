@@ -1,0 +1,263 @@
+/* ==========================================================================
+   core-chatbot-platform — widget.css (πηγαίος κώδικας)
+   Όλες οι κλάσεις έχουν πρόθεμα ccp- για να ΜΗΝ συγκρούονται με το CSS
+   του site του πελάτη. Το χρώμα του πελάτη μπαίνει στη μεταβλητή --ccp-primary.
+   ========================================================================== */
+
+.ccp-root {
+  --ccp-primary: #2563eb;
+  --ccp-primary-text: #ffffff;
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 2147483000;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+.ccp-root *, .ccp-root *::before, .ccp-root *::after { box-sizing: border-box; }
+
+/* ---- Στρογγυλό κουμπί (launcher) ---- */
+.ccp-launcher {
+  width: 60px;
+  height: 60px;
+  border: none;
+  border-radius: 50%;
+  background: var(--ccp-primary);
+  color: var(--ccp-primary-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  padding: 0;
+}
+.ccp-launcher:hover { transform: scale(1.06); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+.ccp-launcher svg { width: 28px; height: 28px; display: block; }
+
+/* ---- Παράθυρο συνομιλίας ---- */
+.ccp-panel {
+  position: absolute;
+  bottom: 76px;
+  right: 0;
+  width: 360px;
+  height: 520px;
+  max-height: calc(100vh - 110px);
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ccp-panel.ccp-open { display: flex; }
+
+/* ---- Κεφαλίδα ---- */
+.ccp-header {
+  background: var(--ccp-primary);
+  color: var(--ccp-primary-text);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.ccp-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+}
+.ccp-title {
+  font-weight: 600;
+  font-size: 15px;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ccp-close {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  opacity: 0.85;
+}
+.ccp-close:hover { opacity: 1; }
+
+/* ---- Περιοχή μηνυμάτων ---- */
+.ccp-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 12px;
+  background: #f5f6f8;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ccp-msg {
+  max-width: 82%;
+  padding: 9px 13px;
+  border-radius: 14px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+.ccp-msg-bot {
+  align-self: flex-start;
+  background: #ffffff;
+  color: #1f2430;
+  border: 1px solid #e6e8ee;
+  border-bottom-left-radius: 4px;
+}
+.ccp-msg-user {
+  align-self: flex-end;
+  background: var(--ccp-primary);
+  color: var(--ccp-primary-text);
+  border-bottom-right-radius: 4px;
+}
+.ccp-msg-error {
+  align-self: flex-start;
+  background: #fdecec;
+  color: #8a1f1f;
+  border: 1px solid #f5c2c2;
+  border-bottom-left-radius: 4px;
+  font-size: 14px;
+}
+
+/* ---- Loading: "πληκτρολογεί..." (3 τελείες) ---- */
+.ccp-typing {
+  align-self: flex-start;
+  background: #ffffff;
+  border: 1px solid #e6e8ee;
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+  padding: 12px 15px;
+  display: flex;
+  gap: 5px;
+}
+.ccp-typing span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #9aa1ad;
+  animation: ccp-bounce 1.2s infinite ease-in-out;
+}
+.ccp-typing span:nth-child(2) { animation-delay: 0.15s; }
+.ccp-typing span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes ccp-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
+
+/* ---- Φόρμα εισαγωγής ---- */
+.ccp-inputbar {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  background: #ffffff;
+  border-top: 1px solid #e6e8ee;
+  flex-shrink: 0;
+}
+.ccp-input {
+  flex: 1;
+  border: 1px solid #d6dae2;
+  border-radius: 22px;
+  padding: 10px 14px;
+  font: inherit;
+  outline: none;
+  resize: none;
+  background: #fff;
+  color: #1f2430;
+}
+.ccp-input:focus { border-color: var(--ccp-primary); }
+.ccp-send {
+  width: 42px;
+  height: 42px;
+  border: none;
+  border-radius: 50%;
+  background: var(--ccp-primary);
+  color: var(--ccp-primary-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+}
+.ccp-send:disabled { opacity: 0.5; cursor: default; }
+.ccp-send svg { width: 18px; height: 18px; display: block; }
+
+/* ---- Υποσέλιδο (GDPR link) ---- */
+.ccp-footer {
+  text-align: center;
+  font-size: 11px;
+  color: #8a90a0;
+  padding: 5px 10px 8px;
+  background: #ffffff;
+  flex-shrink: 0;
+}
+.ccp-footer a {
+  color: #8a90a0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ---- Οθόνη συγκατάθεσης GDPR ---- */
+.ccp-consent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px 20px;
+  background: #f5f6f8;
+  gap: 14px;
+}
+.ccp-consent p {
+  margin: 0;
+  color: #3a3f4c;
+  font-size: 14px;
+}
+.ccp-consent-accept {
+  border: none;
+  border-radius: 22px;
+  background: var(--ccp-primary);
+  color: var(--ccp-primary-text);
+  padding: 10px 26px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ccp-consent-decline {
+  background: none;
+  border: none;
+  color: #8a90a0;
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ---- Κινητά: full-screen παράθυρο ---- */
+@media (max-width: 480px) {
+  .ccp-panel {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    bottom: 0;
+    right: 0;
+  }
+}
