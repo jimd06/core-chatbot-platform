@@ -31,6 +31,15 @@ class Config:
     RATE_LIMIT_CHAT = int(os.environ.get("RATE_LIMIT_CHAT", "20"))
     RATE_LIMIT_LEAD = int(os.environ.get("RATE_LIMIT_LEAD", "5"))
 
+    # Email ειδοποιήσεις (ΠΡΟΑΙΡΕΤΙΚΟ) — SMTP με Gmail App Password.
+    # Τα SMTP_USER / SMTP_PASSWORD μπαίνουν ΜΟΝΟ στο Render Environment,
+    # ποτέ σε αρχείο ή repo. Αν λείπουν, οι ειδοποιήσεις απλώς παραλείπονται
+    # (η πλατφόρμα δουλεύει κανονικά χωρίς αυτά).
+    SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+    SMTP_USER = os.environ.get("SMTP_USER", "")
+    SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+
     @classmethod
     def missing_required(cls):
         """Λίστα με τα υποχρεωτικά env vars που λείπουν."""

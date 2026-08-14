@@ -3,19 +3,31 @@
 Κανόνας: κάθε db_session ανοίγει σύντομα και επιστρέφει ΑΠΛΑ δεδομένα
 (dict/str) — ποτέ ORM αντικείμενα έξω από το session ('Instance not bound
 to a Session'). Οι κλήσεις OpenAI γίνονται ΕΚΤΟΣ session.
+
+Escalation (ελάχιστη έκδοση — το πλήρες module είναι Φάση 5): αν το μήνυμα
+του επισκέπτη περιέχει ελληνικό τηλέφωνο ή escalation keyword από τα
+escalation_rules του πελάτη, φεύγει best-effort email ειδοποίηση στο
+notification_email του (services/notify_service.py, background thread).
 """
 import logging
+import re
 
 from openai import OpenAI
 
 from config.database import db_session
 from models import Client, ClientSettings, Conversation, KnowledgeChunk, Message, UsageLog
 from platform_config import Config
+from services.notify_service import send_async
 from utils.formatters import truncate
 
 logger = logging.getLogger(__name__)
 
 _openai_client = None
+
+# Ελληνικό τηλέφωνο μέσα σε κείμενο: κινητό 69ΧΧΧΧΧΧΧΧ ή σταθερό 2ΧΧΧΧΧΧΧΧΧ
+# (10 ψηφία συνολικά), με προαιρετικό +30 και προαιρετικά κενά/παύλες/τελείες
+# οπουδήποτε ανάμεσα στα ψηφία (π.χ. «69 4123 4567», «210 1234567»).
+PHONE_RE = re.compile(r"(?<!\d)(?:\+?30[\s\-.]?)?(?:69|2\d)(?:[\s\-.]?\d){8}(?!\d)")
 
 
 def _openai():
@@ -38,11 +50,17 @@ def _load_context(client_id: str, conversation_id, visitor_id: str):
     """Session 1: settings + συνομιλία + ιστορικό → απλά δεδομένα."""
     with db_session() as db:
         settings = db.query(ClientSettings).filter_by(client_id=client_id).first()
+        flags = dict(settings.feature_flags or {}) if settings else {}
+        escalation = dict(settings.escalation_rules or {}) if settings else {}
         s = {
             "system_prompt": settings.system_prompt if settings else "",
             "out_of_scope": (settings.out_of_scope_message if settings else "") or
                             "Δεν έχω αυτή την πληροφορία.",
             "forbidden": list(settings.forbidden_topics or []) if settings else [],
+            # Για το ελάχιστο escalation (βλ. _maybe_escalate):
+            "notification_email": (settings.notification_email or "") if settings else "",
+            "escalation_enabled": bool(flags.get("escalation")),
+            "escalation_keywords": [str(k).lower() for k in (escalation.get("keywords") or [])],
         }
 
         conv = None
@@ -65,6 +83,33 @@ def _load_context(client_id: str, conversation_id, visitor_id: str):
         ][::-1]  # παλιότερο → νεότερο
 
         return s, conv_id, history
+
+
+def _maybe_escalate(client_id: str, settings: dict, message: str, conv_id: str) -> None:
+    """Αν ο επισκέπτης ζητά άνθρωπο ή αφήνει τηλέφωνο → email ειδοποίηση.
+
+    Best-effort: η αποστολή γίνεται σε background thread και ποτέ δεν
+    επηρεάζει την απάντηση του chat. Απαιτεί feature_flags.escalation=true
+    και notification_email στα settings του πελάτη.
+    """
+    if not (settings["escalation_enabled"] and settings["notification_email"]):
+        return
+    lowered = message.lower()
+    phone_match = PHONE_RE.search(message)
+    keyword = next((k for k in settings["escalation_keywords"] if k and k in lowered), None)
+    if not (phone_match or keyword):
+        return
+    reason = ("ο επισκέπτης άφησε τηλέφωνο" if phone_match
+              else f"keyword: «{keyword}»")
+    body = (
+        f"Πελάτης πλατφόρμας: {client_id}\n"
+        f"Συνομιλία: {conv_id}\n"
+        f"Λόγος: {reason}\n\n"
+        f"Μήνυμα επισκέπτη:\n{truncate(message, 1000)}"
+    )
+    send_async(settings["notification_email"],
+               f"Escalation — {client_id}: ο επισκέπτης ζητά επικοινωνία",
+               body)
 
 
 def _embed(text: str, client_id: str):
@@ -133,6 +178,10 @@ def _save_turn(conv_id, user_msg, reply, confidence, is_unanswered):
 def answer(client_id: str, message: str, conversation_id=None, visitor_id="anonymous"):
     """Πλήρης κύκλος απάντησης. Επιστρέφει dict έτοιμο για JSON."""
     settings, conv_id, history = _load_context(client_id, conversation_id, visitor_id)
+
+    # Escalation έλεγχος πριν από οτιδήποτε άλλο — καλύπτει ΚΑΙ την περίπτωση
+    # χαμηλού confidence (κάποιος αφήνει τηλέφωνο ακριβώς όταν το bot κολλάει).
+    _maybe_escalate(client_id, settings, message, conv_id)
 
     query_vector = _embed(message, client_id)
     chunks = _search_chunks(client_id, query_vector)
