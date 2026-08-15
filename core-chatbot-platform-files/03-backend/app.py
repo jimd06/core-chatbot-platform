@@ -12,11 +12,14 @@ import sys
 #    και `from config.database import ...` (το config/ package της βάσης).
 # 2) Το 02-config/config.py φορτώνεται με importlib ως 'platform_config'
 #    για να ΜΗ συγκρουστεί με το παραπάνω config/ package.
+# 3) 05-onboarding στο path → δουλεύουν τα `import make_demo` /
+#    `from demo_templates import ...` (Demo-First, Chat 3).
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_LAYER = os.path.join(REPO_ROOT, "01-data-layer")
 BACKEND = os.path.dirname(os.path.abspath(__file__))
+ONBOARDING = os.path.join(REPO_ROOT, "05-onboarding")
 
-for path in (DATA_LAYER, BACKEND):
+for path in (DATA_LAYER, BACKEND, ONBOARDING):
     if path not in sys.path:
         sys.path.insert(0, path)
 

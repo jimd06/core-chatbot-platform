@@ -68,12 +68,16 @@ class IngestSource(Base):
 
 # ---------------------------------------------------------------- εξαγωγή κειμένου
 
-def text_from_url(url: str) -> str:
+def text_from_url(url: str, timeout: int = 30) -> str:
     import requests
     from bs4 import BeautifulSoup
 
-    resp = requests.get(url, timeout=30, headers={"User-Agent": "Mozilla/5.0 (chatbot-ingester)"})
+    resp = requests.get(url, timeout=timeout, headers={"User-Agent": "Mozilla/5.0 (chatbot-ingester)"})
     resp.raise_for_status()
+    # Χωρίς charset στο Content-Type το requests υποθέτει ISO-8859-1 και τα
+    # ελληνικά γίνονται δυσανάγνωστα — ανιχνεύουμε το πραγματικό encoding.
+    if "charset" not in (resp.headers.get("Content-Type") or "").lower():
+        resp.encoding = resp.apparent_encoding
     soup = BeautifulSoup(resp.text, "html.parser")
     for tag in soup(["script", "style", "nav", "footer", "header", "noscript"]):
         tag.decompose()

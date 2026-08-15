@@ -63,6 +63,22 @@ def _load_context(client_id: str, conversation_id, visitor_id: str):
             "escalation_keywords": [str(k).lower() for k in (escalation.get("keywords") or [])],
         }
 
+        # Demo-First (Chat 3): στα demos ελέγχουμε λήξη + όριο απαντήσεων στο
+        # answer(). Χρήση = COUNT των usage_logs με kind="chat" (μόνο για demos
+        # — τα out-of-scope ΔΕΝ γράφουν "chat", άρα δεν καίνε το όριο).
+        is_demo = bool(flags.get("is_demo"))
+        try:
+            demo_limit = int(flags.get("demo_answer_limit") or 20)
+        except (TypeError, ValueError):
+            demo_limit = 20
+        s["is_demo"] = is_demo
+        s["demo_expires_at"] = str(flags.get("demo_expires_at") or "")
+        s["demo_answer_limit"] = demo_limit
+        s["demo_answers_used"] = (
+            db.query(UsageLog).filter_by(client_id=client_id, kind="chat").count()
+            if is_demo else 0
+        )
+
         conv = None
         if conversation_id:
             conv = db.query(Conversation).filter_by(
@@ -175,9 +191,39 @@ def _save_turn(conv_id, user_msg, reply, confidence, is_unanswered):
                        confidence=confidence, is_unanswered=is_unanswered))
 
 
+def _demo_locked_reply(settings: dict):
+    """Μήνυμα «κλειδώματος» demo (λήξη ή εξαντλημένο όριο) ή None.
+
+    Τα κείμενα ζουν στο 05-onboarding/demo_templates.py (ένα σημείο αλήθειας
+    — το app.py βάζει το 05-onboarding στο sys.path). Αν το import αποτύχει
+    (μισό deploy), επιστρέφουμε None: το demo συνεχίζει χωρίς όριο μέχρι να
+    διορθωθεί το deploy — ΠΟΤΕ 500 μπροστά σε υποψήφιο πελάτη.
+    """
+    if not settings.get("is_demo"):
+        return None
+    try:
+        from demo_templates import (DEMO_EXPIRED_MESSAGE, DEMO_LIMIT_MESSAGE,
+                                    demo_expired)
+    except ImportError:
+        return None
+    if demo_expired(settings.get("demo_expires_at") or ""):
+        return DEMO_EXPIRED_MESSAGE
+    if settings.get("demo_answers_used", 0) >= settings.get("demo_answer_limit", 20):
+        return DEMO_LIMIT_MESSAGE
+    return None
+
+
 def answer(client_id: str, message: str, conversation_id=None, visitor_id="anonymous"):
     """Πλήρης κύκλος απάντησης. Επιστρέφει dict έτοιμο για JSON."""
     settings, conv_id, history = _load_context(client_id, conversation_id, visitor_id)
+
+    # Demo-First (Chat 3): ληγμένο ή εξαντλημένο demo → ευγενικό μήνυμα με CTA,
+    # ΧΩΡΙΣ καμία κλήση OpenAI (μηδέν κόστος, ποτέ σφάλμα στον υποψήφιο).
+    locked = _demo_locked_reply(settings)
+    if locked:
+        _save_turn(conv_id, message, locked, 0.0, True)
+        return {"reply": locked, "conversation_id": conv_id, "confidence": 0.0,
+                "is_unanswered": True, "demo_locked": True}
 
     # Escalation έλεγχος πριν από οτιδήποτε άλλο — καλύπτει ΚΑΙ την περίπτωση
     # χαμηλού confidence (κάποιος αφήνει τηλέφωνο ακριβώς όταν το bot κολλάει).

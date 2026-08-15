@@ -6,6 +6,9 @@
                                   μόνο από browser, χωρίς τοπικό περιβάλλον
 - POST /api/v1/admin/knowledge  → φόρτωση γνώσης με embeddings για έναν client_id
 - GET  /api/v1/admin/leads      → λίστα leads ενός πελάτη (έλεγχος χωρίς psql)
+- POST /api/v1/admin/demo         → Demo-First: demo chatbot από site υποψήφιου
+- GET  /api/v1/admin/demo/status  → πρόοδος/κατάσταση ενός demo
+- POST /api/v1/admin/demo/cleanup → καθάρισμα ληγμένων demos (έτοιμο για Cron)
 """
 from flask import Blueprint, jsonify, request
 from sqlalchemy import text
@@ -231,3 +234,103 @@ def add_knowledge():
                         model=Config.EMBEDDING_MODEL, total_tokens=tokens))
 
     return jsonify({"ok": True, "added": len(embeddings)}), 200
+
+
+# ===========================================================================
+# Demo-First (Chat 3): demo chatbot από το site υποψήφιου πελάτη
+# ===========================================================================
+
+def _load_make_demo():
+    """Lazy import: το 05-onboarding μπαίνει στο sys.path από το app.py.
+    Αν λείπει το αρχείο από το deploy (π.χ. μισό upload χωρίς Commit),
+    σφάλμα ΜΟΝΟ στα demo endpoints — όχι σε όλη την πλατφόρμα."""
+    import make_demo
+    return make_demo
+
+
+_MAKE_DEMO_MISSING = ("Λείπει το 05-onboarding/make_demo.py από το deploy — "
+                      "έλεγξε ότι ανέβηκε ο φάκελος και πατήθηκε το Commit.")
+
+
+@admin_bp.post("/demo")
+@require_admin_key
+def create_demo():
+    """Δημιουργία demo με ΜΙΑ κλήση. Body:
+    {site_url, business_name, industry, contact_email,
+     answer_limit? (1-200, default 20), days? (1-30, default 7),
+     client_id? (ΜΟΝΟ για επανεκκίνηση ingestion υπάρχοντος demo)}
+
+    industry: iatreio | kommotirio | xenodocheio | gymnastirio | skafi | allo
+    Guard: αν υπάρχει ήδη ΕΝΕΡΓΟ demo με ίδιο site_url → επιστρέφεται το
+    υπάρχον (reused: true) — διπλό κλικ ΔΕΝ φτιάχνει δεύτερο client.
+    """
+    try:
+        make_demo = _load_make_demo()
+    except ImportError:
+        return jsonify({"error": _MAKE_DEMO_MISSING}), 500
+
+    data = request.get_json(silent=True) or {}
+
+    # Πίσω από το Render proxy το host_url μπορεί να βγει http:// — για τα
+    # links του email/demo θέλουμε https (εκτός από τοπικό τρέξιμο).
+    base_url = request.host_url.rstrip("/")
+    if base_url.startswith("http://") and "localhost" not in base_url \
+            and "127.0.0.1" not in base_url:
+        base_url = "https://" + base_url[len("http://"):]
+
+    result = make_demo.create_demo(
+        site_url=clean_str(data.get("site_url"), 512),
+        business_name=clean_str(data.get("business_name"), 255),
+        industry=clean_str(data.get("industry"), 32),
+        contact_email=clean_str(data.get("contact_email"), 255),
+        base_url=base_url,
+        reuse_client_id=clean_str(data.get("client_id"), 64) or None,
+        answer_limit=data.get("answer_limit"),
+        days=data.get("days"),
+    )
+    return jsonify(result), (200 if result.get("ok") else 400)
+
+
+@admin_bp.get("/demo/status")
+@require_admin_key
+def demo_status():
+    """GET /api/v1/admin/demo/status?client_id=demo-xxxx-1a2b
+    → status (pending/ingesting/ready/error/expired), σελίδες, chunks,
+      απαντήσεις που απομένουν, λήξη."""
+    try:
+        make_demo = _load_make_demo()
+    except ImportError:
+        return jsonify({"error": _MAKE_DEMO_MISSING}), 500
+
+    client_id = clean_str(request.args.get("client_id"), 64)
+    if not client_id:
+        return jsonify({"error": "Χρειάζεται client_id "
+                                 "(π.χ. ?client_id=demo-x-1a2b)"}), 400
+    state = make_demo.get_demo_state(client_id)
+    if state is None:
+        return jsonify({"error": f"Άγνωστος πελάτης '{client_id}'"}), 404
+    return jsonify(state), 200
+
+
+@admin_bp.post("/demo/cleanup")
+@require_admin_key
+def demo_cleanup():
+    """Καθαρίζει ληγμένα demos: chunks + ingest hashes + συνομιλίες/μηνύματα,
+    client → ανενεργός. ΚΡΑΤΑΕΙ client/settings (η σελίδα demo δείχνει
+    «έληξε» + CTA) και ΟΛΑ τα usage_logs (ιστορικό κόστους demos ανά μήνα).
+
+    Body (προαιρετικό): {"client_id": "demo-...", "force": true} → καθάρισμα
+    ΣΥΓΚΕΚΡΙΜΕΝΟΥ demo ακόμα κι αν δεν έχει λήξει (για δοκιμές).
+    Χωρίς body: όλα τα ληγμένα — έτοιμο για μελλοντικό Render Cron Job.
+    """
+    try:
+        make_demo = _load_make_demo()
+    except ImportError:
+        return jsonify({"error": _MAKE_DEMO_MISSING}), 500
+
+    data = request.get_json(silent=True) or {}
+    cleaned = make_demo.cleanup_expired(
+        only_client_id=clean_str(data.get("client_id"), 64) or None,
+        force=bool(data.get("force")),
+    )
+    return jsonify({"ok": True, "cleaned": cleaned, "count": len(cleaned)}), 200

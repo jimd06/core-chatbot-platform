@@ -16,6 +16,8 @@
    5. Κρατάει ιστορικό/συγκατάθεση/visitor_id σε SessionStorage
       (σβήνονται όταν κλείσει το tab — GDPR-friendly by design).
    6. Link «Διαγραφή δεδομένων» → DELETE /api/v1/chat/<client_id>/visitor/<visitor_id>.
+   7. Δημόσιο API: window.CCPWidget = { open(), ask(text) } — προαιρετικό,
+      το χρησιμοποιεί η σελίδα /demo για τα κουμπιά προτεινόμενων ερωτήσεων.
 
    ΣΗΜΕΙΩΣΗ BUILD: το __WIDGET_CSS__ παρακάτω αντικαθίσταται από το
    περιεχόμενο του widget.css όταν τρέχει το 04-widget/build.py.
@@ -194,6 +196,12 @@
       history.forEach(function (m) { addMsg(m.role === "user" ? "user" : "bot", m.content, true); });
     }
     inputEl.focus();
+    // Ερώτηση από CCPWidget.ask() που περίμενε τη συγκατάθεση → φεύγει τώρα.
+    if (pendingAsk) {
+      inputEl.value = pendingAsk;
+      pendingAsk = null;
+      send();
+    }
   }
 
   /* ---- 4. Μηνύματα -------------------------------------------------------- */
@@ -280,6 +288,7 @@
 
   /* ---- 6. Άνοιγμα/κλείσιμο ------------------------------------------------ */
   var chatStarted = false;
+  var pendingAsk = null; // ερώτηση από CCPWidget.ask() που περιμένει τη συγκατάθεση
   function togglePanel() {
     var open = panel.classList.toggle("ccp-open");
     if (open && !chatStarted) {
@@ -290,6 +299,29 @@
       inputEl.focus();
     }
   }
+
+  /* ---- 6β. Δημόσιο API (προαιρετικό — το χρησιμοποιεί η σελίδα /demo) ----- */
+  function openPanel() {
+    if (!panel) return; // το UI δεν έχει χτιστεί ακόμα (config σε εξέλιξη)
+    if (!panel.classList.contains("ccp-open")) togglePanel();
+  }
+
+  function askQuestion(text) {
+    text = String(text || "").trim();
+    if (!panel) { pendingAsk = text || null; return; }
+    openPanel();
+    if (!text) return;
+    if (panel.contains(inputEl)) {
+      // Το chat είναι ορατό (η συγκατάθεση έχει δοθεί) → στείλε αμέσως.
+      inputEl.value = text;
+      send();
+    } else {
+      // Πρώτα η οθόνη συγκατάθεσης GDPR — η ερώτηση φεύγει μετά το «Συμφωνώ».
+      pendingAsk = text;
+    }
+  }
+
+  window.CCPWidget = { open: openPanel, ask: askQuestion };
 
   /* ---- 7. Εκκίνηση: config από το backend -------------------------------- */
   function init() {
